@@ -1,4 +1,4 @@
-use serde_json::{Result, Value, json};
+use serde_json::{Value};
 use std::string::String;
 
 #[derive(Debug, PartialEq)]
@@ -33,23 +33,19 @@ pub enum Event {
 pub fn create_from_json_string(json: String) -> Command {
     let json_structure: Value = serde_json::from_str(&json).unwrap();
 
-    let command_type = &json_structure["type"];
-
-    if command_type == "find" {
-        return match &json_structure["path"] {
-            Value::String(String) => Command::FindImage {
-                path: String::from(json_structure["path"].as_str().unwrap())
+    match json_structure["type"].as_str() {
+        Some("find") => match &json_structure["path"] {
+            Value::String(path) => Command::FindImage {
+               path: path.to_string()
             },
             _ => Command::WrongCommand
-        };
-    } else if command_type == "resize" {
-        return Command::ResizeImage {
+        } ,
+        Some("resize") => Command::ResizeImage {
             source: String::from(json_structure["source"].as_str().unwrap()),
             sizes: vec![]
-        }
+        },
+        _ => Command::WrongCommand
     }
-
-    Command::WrongCommand
 }
 
 #[cfg(test)]
