@@ -1,4 +1,5 @@
-use serde_json::Value;
+use serde_json::{Value, json, to_string};
+
 use std::string::String;
 
 #[derive(Debug, PartialEq)]
@@ -13,6 +14,23 @@ pub enum Command {
     WrongCommand,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Event {
+    ImageFound {
+        path: String
+    },
+    ImageNotFound {
+        path: String
+    },
+    ImageResizeComplete {
+        target: String
+    },
+    ImageResizeFailed {
+        target: String,
+        reason: String,
+    }
+}
+
 pub fn parse_json_string(json: String) -> Command {
     match serde_json::from_str(&json) {
         Ok(value) => create_command_from_parsed_json_value(value),
@@ -20,8 +38,20 @@ pub fn parse_json_string(json: String) -> Command {
     }
 }
 
+pub fn serialize_event(event: Event) -> String {
+    return match event {
+        Event::ImageFound { path } => to_string(
+            &json!({
+                "event": "found",
+                "path": path
+            })
+        ).unwrap(),
+        _ => String::from("")
+    };
+}
+
 fn create_command_from_parsed_json_value(json: Value) -> Command {
-    match json["type"].as_str() {
+    match json["command"].as_str() {
         Some("find") => match &json["path"] {
             Value::String(path) => Command::FindImage {
                 path: path.to_string()
@@ -64,8 +94,8 @@ fn is_size_tuple(target: &Value, width: &Value, height: &Value) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod parser {
+    use super::{parse_json_string, Command};
 
     #[test]
     fn creates_find_image_command_from_json() {
@@ -74,7 +104,7 @@ mod tests {
                 path: String::from("/path/to/file")
             },
             parse_json_string(
-                String::from("{\"type\":\"find\",\"path\":\"/path/to/file\"}")
+                String::from("{\"command\":\"find\",\"path\":\"/path/to/file\"}")
             )
         )
     }
@@ -84,7 +114,7 @@ mod tests {
         assert_eq!(
             Command::WrongCommand,
             parse_json_string(
-                String::from("{\"type\":\"something\"}")
+                String::from("{\"command\":\"something\"}")
             )
         )
     }
@@ -99,7 +129,7 @@ mod tests {
     #[test]
     fn when_path_is_missing_for_find_command_creates_wrong_command() {
         assert_eq!(Command::WrongCommand, parse_json_string(
-            String::from("{\"type\": \"find\"}")
+            String::from("{\"command\": \"find\"}")
         ));
     }
 
@@ -115,7 +145,7 @@ mod tests {
             parse_json_string(
                 String::from(
                     "{\
-                    \"type\":\"resize\", \
+                    \"command\":\"resize\", \
                     \"source\":\"path/to/image.jpg\", \
                     \"sizes\": [[\"path/to/320x400/image.jpg\", 320, 400]]\
                 }"
@@ -137,7 +167,7 @@ mod tests {
             parse_json_string(
                 String::from(
                     "{\
-                    \"type\":\"resize\", \
+                    \"command\":\"resize\", \
                     \"source\":\"path/to/image.jpg\", \
                     \"sizes\": [\
                         [\"path/to/320x400/image.jpg\", 320, 400],\
@@ -160,7 +190,7 @@ mod tests {
             parse_json_string(
                 String::from(
                     "{\
-                    \"type\":\"resize\", \
+                    \"command\":\"resize\", \
                     \"source\":\"path/to/image.jpg\", \
                     \"sizes\": []\
                 }"
@@ -171,6 +201,21 @@ mod tests {
 
     #[test]
     fn when_invalid_json_provided_creates_wrong_command_instance() {
-        assert_eq!(Command::WrongCommand, parse_json_string(String::from("{daasdas}")));
+        assert_eq!(Command::WrongCommand, parse_json_string(String::from("{invalidjson}")));
+    }
+}
+
+#[cfg(test)]
+mod serializer {
+    use super::{Event, serialize_event};
+
+    #[test]
+    fn converts_event_for_found_image_into_json_string() {
+        assert_eq!(
+            String::from("{\"event\":\"found\",\"path\":\"/file/path.jpg\"}"),
+            serialize_event(Event::ImageFound {
+                path: String::from("/file/path.jpg")
+            })
+        )
     }
 }

@@ -26,7 +26,7 @@ There are two possible events produced by this command, `found` nd `not_found` w
 {"event": "not_found", "path": "/path/to/a/file"}
 ```  
 
-## Resize Image
+### Resize Image
 
 PHP application sends `resize` commands to request Rust server resize an image in various sizes. Each size variation is a tuple of target path (string), width (int) and height (int) in `sizes` array.
 
