@@ -1,6 +1,11 @@
 use serde_json::{Value, json, to_string};
 
 use std::string::String;
+use tokio::codec::{LinesCodec, Encoder};
+use std::io;
+use tokio_codec::{Decoder, Framed};
+use tokio::io::{AsyncRead, AsyncWrite};
+use bytes::{BytesMut, BufMut};
 
 #[derive(Debug, PartialEq)]
 pub enum Command {
@@ -12,6 +17,51 @@ pub enum Command {
         sizes: Vec<(String, u32, u32)>,
     },
     WrongCommand,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct CommandsCodec {
+    line_codec: LinesCodec
+}
+
+impl CommandsCodec
+{
+    pub fn new() -> Self {
+        CommandsCodec {
+            line_codec: LinesCodec::new()
+        }
+    }
+}
+
+impl Decoder for CommandsCodec
+{
+    type Item = Command;
+    type Error = io::Error;
+
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Command>, io::Error> {
+        match self.line_codec.decode(buf) {
+            Ok(Some(value)) => Ok(Some(parse_json_string(value))),
+            Ok(None) => Ok(None),
+            Err(value) => Err(value)
+        }
+    }
+
+    fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<Command>, io::Error> {
+        match self.line_codec.decode_eof(buf) {
+            Ok(Some(value)) => Ok(Some(parse_json_string(value))),
+            Ok(None) => Ok(None),
+            Err(value) => Err(value)
+        }
+    }
+}
+
+impl Encoder for CommandsCodec {
+    type Item = String;
+    type Error = io::Error;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -28,26 +78,28 @@ pub enum Event {
     ImageResizeFailed {
         target: String,
         reason: String,
+    },
+}
+
+impl Event {
+    pub fn to_string(&self) -> String {
+        return match self {
+            Event::ImageFound { path } => to_string(
+                &json!({
+                    "event": "found",
+                    "path": path
+                })
+            ).unwrap(),
+            _ => String::from("")
+        };
     }
 }
 
-pub fn parse_json_string(json: String) -> Command {
+fn parse_json_string(json: String) -> Command {
     match serde_json::from_str(&json) {
         Ok(value) => create_command_from_parsed_json_value(value),
         _ => Command::WrongCommand
     }
-}
-
-pub fn serialize_event(event: Event) -> String {
-    return match event {
-        Event::ImageFound { path } => to_string(
-            &json!({
-                "event": "found",
-                "path": path
-            })
-        ).unwrap(),
-        _ => String::from("")
-    };
 }
 
 fn create_command_from_parsed_json_value(json: Value) -> Command {
@@ -60,7 +112,7 @@ fn create_command_from_parsed_json_value(json: Value) -> Command {
         },
         Some("resize") => Command::ResizeImage {
             source: String::from(json["source"].as_str().unwrap()),
-            sizes: collect_image_sizes_from_json(json)
+            sizes: collect_image_sizes_from_json(json),
         },
         _ => Command::WrongCommand
     }
@@ -80,9 +132,9 @@ fn parse_size_item(size: &Value) -> Option<(String, u32, u32)> {
     match size.as_array() {
         Some(sizes) => match &sizes[..] {
             [target, width, height] if is_size_tuple(target, width, height) => Some((
-                    String::from(target.as_str().unwrap()),
-                    width.as_u64().unwrap() as u32,
-                    height.as_u64().unwrap() as u32)),
+                String::from(target.as_str().unwrap()),
+                width.as_u64().unwrap() as u32,
+                height.as_u64().unwrap() as u32)),
             _ => None
         }
         _ => None
@@ -181,11 +233,11 @@ mod parser {
     }
 
     #[test]
-    fn when_empty_resize_list_creates_empty_resize_list_command () {
+    fn when_empty_resize_list_creates_empty_resize_list_command() {
         assert_eq!(
             Command::ResizeImage {
                 source: String::from("path/to/image.jpg"),
-                sizes: vec![]
+                sizes: vec![],
             },
             parse_json_string(
                 String::from(
@@ -207,15 +259,15 @@ mod parser {
 
 #[cfg(test)]
 mod serializer {
-    use super::{Event, serialize_event};
+    use super::Event;
 
     #[test]
     fn converts_event_for_found_image_into_json_string() {
         assert_eq!(
             String::from("{\"event\":\"found\",\"path\":\"/file/path.jpg\"}"),
-            serialize_event(Event::ImageFound {
+            Event::ImageFound {
                 path: String::from("/file/path.jpg")
-            })
+            }.to_string()
         )
     }
 }

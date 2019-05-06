@@ -6,8 +6,7 @@ extern crate tokio_codec;
 use tokio::codec::Decoder;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
-use tokio_codec::LinesCodec;
-use image_resize_rust::parse_json_string;
+use image_resize_rust::*;
 
 use std::env;
 use std::net::SocketAddr;
@@ -27,12 +26,11 @@ fn main() -> Result<(), Box<std::error::Error>> {
         .map_err(|e| println!("failed to accept socket; error = {:?}", e))
         .for_each(move |socket| {
 
-            let framed = LinesCodec::new().framed(socket);
+            let framed = CommandsCodec::new().framed(socket);
             let (_writer, reader) = framed.split();
 
             let processor = reader
-                .for_each(|line| {
-                    let command = parse_json_string(line);
+                .for_each(|command| {
                     println!("Received: {:?}", command);
                     Ok(())
                 })
@@ -43,7 +41,9 @@ fn main() -> Result<(), Box<std::error::Error>> {
                     Ok(())
                 });
 
-            tokio::spawn(processor)
+            tokio::spawn(
+                processor
+            )
         });
 
     tokio::run(done);
