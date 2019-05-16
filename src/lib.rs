@@ -291,9 +291,7 @@ mod serializer {
     fn converts_event_for_found_image_into_json_string() {
         assert_eq!(
             String::from("{\"event\":\"found\",\"path\":\"/file/path.jpg\"}"),
-            Event::ImageFound {
-                path: String::from("/file/path.jpg")
-            }.to_string()
+            Event::found("/file/path.jpg").to_string()
         )
     }
 
@@ -301,9 +299,7 @@ mod serializer {
     fn converts_event_for_not_found_image_into_json_string() {
         assert_eq!(
             String::from("{\"event\":\"not_found\",\"path\":\"/file/path2.jpg\"}"),
-            Event::ImageNotFound {
-                path: String::from("/file/path2.jpg")
-            }.to_string()
+            Event::not_found("/file/path2.jpg").to_string()
         )
     }
 
@@ -311,9 +307,7 @@ mod serializer {
     fn converts_event_completed_resize_into_json_string() {
         assert_eq!(
             String::from("{\"event\":\"resize_completed\",\"target\":\"/file/path3.jpg\"}"),
-            Event::ImageResizeComplete {
-                target: String::from("/file/path3.jpg")
-            }.to_string()
+            Event::resize_complete("/file/path3.jpg").to_string()
         )
     }
 
