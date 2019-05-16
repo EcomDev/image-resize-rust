@@ -1,7 +1,7 @@
 extern crate image_resize_rust;
 extern crate tokio_codec;
 
-use image_resize_rust::{CommandsCodec, Command};
+use image_resize_rust::{CommandsCodec, Command, Event};
 use bytes::{BytesMut, BufMut};
 use tokio_codec::{Decoder, Encoder};
 
@@ -88,4 +88,13 @@ fn propagates_decode_eof_into_line_codec () {
         ],
         commands
     );
+}
+
+#[test]
+fn encodes_event_as_json_line() {
+    let mut codec = CommandsCodec::new();
+    let mut buf = BytesMut::new();
+
+    codec.encode(Event::found("file.jpg"), &mut buf).unwrap();
+    assert_eq!("{\"event\":\"found\",\"path\":\"file.jpg\"}\n", buf);
 }

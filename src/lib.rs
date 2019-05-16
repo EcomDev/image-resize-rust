@@ -1,11 +1,9 @@
 use serde_json::{Value, json, to_string};
 
 use std::string::String;
-use tokio::codec::{LinesCodec, Encoder};
+use tokio::codec::{LinesCodec, Encoder, Decoder};
 use std::io;
-use tokio_codec::{Decoder, Framed};
-use tokio::io::{AsyncRead, AsyncWrite};
-use bytes::{BytesMut, BufMut};
+use bytes::BytesMut;
 
 #[derive(Debug, PartialEq)]
 pub enum Command {
@@ -56,11 +54,11 @@ impl Decoder for CommandsCodec
 }
 
 impl Encoder for CommandsCodec {
-    type Item = String;
+    type Item = Event;
     type Error = io::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        unimplemented!()
+        self.line_codec.encode(item.to_string(), dst)
     }
 }
 
@@ -82,16 +80,44 @@ pub enum Event {
 }
 
 impl Event {
+    pub fn found(path: &str) -> Event {
+        Event::ImageFound { path: String::from(path) }
+    }
+
+    pub fn not_found(path: &str) -> Event {
+        Event::ImageNotFound { path: String::from(path) }
+    }
+
+    pub fn resize_complete(target: &str) -> Event {
+        Event::ImageResizeComplete { target: String::from(target) }
+    }
+
+    pub fn resize_failed(target: &str, reason: &str) -> Event {
+        Event::ImageResizeFailed { target: String::from(target), reason: String::from(reason) }
+    }
+
     pub fn to_string(&self) -> String {
-        return match self {
-            Event::ImageFound { path } => to_string(
-                &json!({
-                    "event": "found",
-                    "path": path
-                })
-            ).unwrap(),
-            _ => String::from("")
+        let json = match self {
+            Event::ImageFound { path } => json!({
+                "event": "found",
+                "path": path
+            }),
+            Event::ImageNotFound { path } => json!({
+                "event": "not_found",
+                "path": path
+            }),
+            Event::ImageResizeComplete { target } => json!({
+                "event": "resize_completed",
+                "target": target
+            }),
+            Event::ImageResizeFailed { target, reason } => json!({
+                "event": "resize_failed",
+                "target": target,
+                "reason": reason
+            }),
         };
+
+        to_string(&json).unwrap()
     }
 }
 
@@ -133,8 +159,8 @@ fn parse_size_item(size: &Value) -> Option<(String, u32, u32)> {
         Some(sizes) => match &sizes[..] {
             [target, width, height] if is_size_tuple(target, width, height) => Some((
                 String::from(target.as_str().unwrap()),
-                width.as_u64().unwrap() as u32,
-                height.as_u64().unwrap() as u32)),
+                width.as_u64()? as u32,
+                height.as_u64()? as u32)),
             _ => None
         }
         _ => None
@@ -268,6 +294,34 @@ mod serializer {
             Event::ImageFound {
                 path: String::from("/file/path.jpg")
             }.to_string()
+        )
+    }
+
+    #[test]
+    fn converts_event_for_not_found_image_into_json_string() {
+        assert_eq!(
+            String::from("{\"event\":\"not_found\",\"path\":\"/file/path2.jpg\"}"),
+            Event::ImageNotFound {
+                path: String::from("/file/path2.jpg")
+            }.to_string()
+        )
+    }
+
+    #[test]
+    fn converts_event_completed_resize_into_json_string() {
+        assert_eq!(
+            String::from("{\"event\":\"resize_completed\",\"target\":\"/file/path3.jpg\"}"),
+            Event::ImageResizeComplete {
+                target: String::from("/file/path3.jpg")
+            }.to_string()
+        )
+    }
+
+    #[test]
+    fn converts_event_failed_resize_into_json_string() {
+        assert_eq!(
+            String::from("{\"event\":\"resize_failed\",\"reason\":\"Something is wrong\",\"target\":\"/file/path4.jpg\"}"),
+            Event::resize_failed("/file/path4.jpg", "Something is wrong").to_string()
         )
     }
 }
