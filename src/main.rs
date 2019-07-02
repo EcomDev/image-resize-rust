@@ -1,15 +1,16 @@
-#![deny(warnings)]
+mod commands;
+mod events;
+mod codec;
 
-extern crate tokio;
-extern crate tokio_codec;
+use codec::*;
 
 use tokio::codec::Decoder;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
-use image_resize_rust::*;
-
 use std::env;
 use std::net::SocketAddr;
+
+
 
 fn main() -> Result<(), Box<std::error::Error>> {
 
@@ -20,11 +21,10 @@ fn main() -> Result<(), Box<std::error::Error>> {
     let socket = TcpListener::bind(&addr)?;
     println!("Listening on: {}", addr);
 
-
     let done = socket
         .incoming()
         .map_err(|e| println!("failed to accept socket; error = {:?}", e))
-        .for_each(move |socket| {
+        .for_each(|socket| {
 
             let framed = CommandsCodec::new().framed(socket);
             let (_writer, reader) = framed.split();
