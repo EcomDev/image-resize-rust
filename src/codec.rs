@@ -69,7 +69,7 @@ mod tests
     {
         let mut codec = CommandsCodec::new();
         let bytes = &mut BytesMut::new();
-        bytes.reserve(1000);
+        bytes.reserve(3);
         bytes.put("{}\n");
         assert_eq!(Command::WrongCommand, codec.decode(bytes).unwrap().unwrap());
     }
@@ -79,7 +79,7 @@ mod tests
     {
         let mut codec = CommandsCodec::new();
         let bytes = &mut BytesMut::new();
-        bytes.reserve(1000);
+        bytes.reserve(40);
         bytes.put("{\"command\": \"find\", \"path\": \"file.txt\"}\n");
         assert_eq!(
             Command::FindImage {
@@ -94,7 +94,7 @@ mod tests
     {
         let mut codec = CommandsCodec::new();
         let bytes = &mut BytesMut::new();
-        bytes.reserve(1000);
+        bytes.reserve(82);
         bytes.put("{\"command\": \"find\", \"path\": \"file1.txt\"}\n");
         bytes.put("{\"command\": \"find\", \"path\": \"file2.txt\"}\n");
 
@@ -119,7 +119,7 @@ mod tests
     fn propagates_decode_eof_into_line_codec () {
         let mut codec = CommandsCodec::new();
         let bytes = &mut BytesMut::new();
-        bytes.reserve(1000);
+        bytes.reserve(81);
         bytes.put("{\"command\": \"find\", \"path\": \"file1.txt\"}\n");
         bytes.put("{\"command\": \"find\", \"path\": \"file2.txt\"}");
 

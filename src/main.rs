@@ -2,7 +2,7 @@ mod commands;
 mod events;
 mod codec;
 
-use codec::*;
+use codec::CommandsCodec;
 
 use tokio::codec::Decoder;
 use tokio::net::TcpListener;
