@@ -1,6 +1,7 @@
 mod commands;
 mod events;
 mod codec;
+mod new_commands;
 
 use codec::CommandsCodec;
 

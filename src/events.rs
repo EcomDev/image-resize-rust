@@ -60,7 +60,7 @@ impl Event {
 }
 
 #[cfg(test)]
-mod serializer {
+mod tests {
     use super::Event;
 
     #[test]

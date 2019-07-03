@@ -1,4 +1,6 @@
 use serde_json::Value;
+use futures::Future;
+use crate::events::Event;
 
 #[derive(Debug, PartialEq)]
 pub enum Command {
@@ -10,6 +12,15 @@ pub enum Command {
         sizes: Vec<(String, u32, u32)>,
     },
     WrongCommand,
+}
+
+trait CommandTrait {
+    fn merge_with(&self, other: Self) -> Self;
+
+    fn hash_key(&self) -> String;
+
+    fn process_handler(&self)
+        -> Box<Future<Item = Event, Error = std::io::Error>>;
 }
 
 pub fn create_command(json: String) -> Command {
@@ -48,11 +59,12 @@ fn collect_image_sizes_from_json(json: Value) -> Vec<(String, u32, u32)> {
 fn parse_size_item(size: &Value) -> Option<(String, u32, u32)> {
     match size.as_array() {
         Some(sizes) => match &sizes[..] {
-            [target, width, height] if is_size_tuple(target, width, height) => Some((
-                String::from(target.as_str().unwrap()),
-                width.as_u64()? as u32,
-                height.as_u64()? as u32)),
-            _ => None
+            [target, width, height]
+                if is_size_tuple(target, width, height) => Some((
+                    String::from(target.as_str().unwrap()),
+                    width.as_u64()? as u32,
+                    height.as_u64()? as u32)),
+                _ => None
         }
         _ => None
     }
@@ -63,7 +75,7 @@ fn is_size_tuple(target: &Value, width: &Value, height: &Value) -> bool {
 }
 
 #[cfg(test)]
-mod parser {
+mod tests {
     use super::*;
 
     #[test]
@@ -172,4 +184,10 @@ mod parser {
     fn when_invalid_json_provided_creates_wrong_command_instance() {
         assert_eq!(Command::WrongCommand, create_command(String::from("{invalidjson}")));
     }
+}
+
+#[cfg(test)]
+mod wrong_command
+{
+
 }
