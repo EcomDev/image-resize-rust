@@ -1,13 +1,14 @@
 use futures::Future;
 use std::fmt::Debug;
-use serde_json::{json, Value, to_string as json_to_string};
+use serde_json::{json, Value as JsonValue};
+use tokio::sync::mpsc::UnboundedSender;
 
 pub trait Command {
     fn process_handler(&self) -> Box<Future<Item=Event, Error=std::io::Error>>;
 }
 
 pub trait Event {
-    fn as_json(&self) -> String;
+    fn as_json(&self) -> JsonValue;
 }
 
 type ImagePath = String;
@@ -42,7 +43,7 @@ impl Command for Commands
 }
 
 impl Event for Events {
-    fn as_json(&self) -> String {
+    fn as_json(&self) -> JsonValue {
         match self {
             Events::InvalidInputProvided(reason) => json_event_invalid_input(reason),
             Events::ImageFound(path) => json_event_image_found(path),
@@ -55,44 +56,44 @@ impl Event for Events {
     }
 }
 
-fn json_event_invalid_input(reason: &WrongInputDescription) -> String {
-    json_to_string(&json!({
+fn json_event_invalid_input(reason: &WrongInputDescription) -> JsonValue {
+    json!({
         "event": "invalid_input",
         "reason": reason
-    })).unwrap()
+    })
 }
 
-fn json_event_image_found(path: &ImagePath) -> String {
-    json_to_string(&json!({
+fn json_event_image_found(path: &ImagePath) -> JsonValue {
+    json!({
         "event": "image_found",
         "path": path
-    })).unwrap()
+    })
 }
 
-fn json_event_image_not_found(path: &ImagePath) -> String {
-    json_to_string(&json!({
+fn json_event_image_not_found(path: &ImagePath) -> JsonValue {
+    json!({
         "event": "image_not_found",
         "path": path
-    })).unwrap()
+    })
 }
 
-fn json_event_image_resize_completed(target: &ImageTarget) -> String {
+fn json_event_image_resize_completed(target: &ImageTarget) -> JsonValue {
     let ImageTarget(path, ImageSize(width, height)) = target;
-    json_to_string(&json!({
+    json!({
         "event": "image_resize_completed",
         "path": path,
         "size": [width, height]
-    })).unwrap()
+    })
 }
 
-fn json_event_image_resize_failed(target: &ImageTarget, reason: &ImageResizeFailureReason) -> String {
+fn json_event_image_resize_failed(target: &ImageTarget, reason: &ImageResizeFailureReason) -> JsonValue {
     let ImageTarget(path, ImageSize(width, height)) = target;
-    json_to_string(&json!({
+    json!({
         "event": "image_resize_failed",
         "path": path,
         "size": [width, height],
         "reason": reason
-    })).unwrap()
+    })
 }
 
 #[cfg(test)]
@@ -102,7 +103,7 @@ mod event_serialization {
     #[test]
     fn serializes_invalid_input_event_as_json() {
         assert_eq!(
-            r#"{"event":"invalid_input","reason":"Can't parse input line as json"}"#,
+            json!({"event":"invalid_input","reason":"Can't parse input line as json"}),
             Events::InvalidInputProvided("Can't parse input line as json".into()).as_json()
         );
     }
@@ -110,7 +111,7 @@ mod event_serialization {
     #[test]
     fn serializes_image_found_event_as_json() {
         assert_eq!(
-            r#"{"event":"image_found","path":"/path/to/image.jpg"}"#,
+            json!({"event":"image_found","path":"/path/to/image.jpg"}),
             Events::ImageFound("/path/to/image.jpg".into()).as_json()
         )
     }
@@ -118,7 +119,7 @@ mod event_serialization {
     #[test]
     fn serializes_image_not_found_event_as_json() {
         assert_eq!(
-            r#"{"event":"image_not_found","path":"/path/to/image.jpg"}"#,
+            json!({"event":"image_not_found","path":"/path/to/image.jpg"}),
             Events::ImageNotFound("/path/to/image.jpg".into()).as_json()
         )
     }
@@ -126,7 +127,11 @@ mod event_serialization {
     #[test]
     fn serializes_image_resize_completed_as_json() {
         assert_eq!(
-            r#"{"event":"image_resize_completed","path":"/path/to/image1.jpg","size":[300,200]}"#,
+            json!({
+                "event": "image_resize_completed",
+                "path": "/path/to/image1.jpg",
+                "size": [300,200]
+            }),
             Events::ImageResizeCompleted(
                 ImageTarget(
                     "/path/to/image1.jpg".into(),
@@ -139,7 +144,12 @@ mod event_serialization {
     #[test]
     fn serializes_image_resize_failed_as_json() {
         assert_eq!(
-            r#"{"event":"image_resize_failed","path":"/path/to/image1.jpg","reason":"Failed!","size":[300,200]}"#,
+            json!({
+                "event": "image_resize_failed",
+                "path": "/path/to/image1.jpg",
+                "size": [300,200],
+                "reason": "Failed!",
+            }),
             Events::ImageResizeFailed(
                 ImageTarget(
                     "/path/to/image1.jpg".into(),
