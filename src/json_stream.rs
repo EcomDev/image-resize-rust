@@ -1,9 +1,6 @@
 use tokio::prelude::*;
 use futures::prelude::*;
-use tokio::sync::mpsc::UnboundedReceiver;
-use futures::stream::{Stream, Chain};
-use std::fmt::Error;
-use futures::OrElse;
+use futures::stream::Stream;
 
 #[derive(Debug, PartialEq)]
 enum Connection<T: Sized,E: Sized>  {
@@ -17,17 +14,14 @@ struct ConnectionError(());
 fn create_merged_input_stream<S1: Stream + Sized>(input_stream: S1)
     -> impl Stream<Item=Connection<S1::Item, S1::Error>, Error=ConnectionError>
 {
-    stream::empty().chain(
-        input_stream.map(|v| Connection::InputCommand(v))
-            .or_else( |e| future::ok(Connection::InputError(e)) )
-    )
+    input_stream.map(|v| Connection::InputCommand(v))
+        .or_else( |e| future::ok(Connection::InputError(e)))
 }
 
 #[cfg(test)]
 mod stream_merger
 {
     use super::*;
-    use tokio::sync::mpsc::unbounded_channel;
     use serde_json::{Value as JsonValue, json};
     use futures::stream::Empty;
 
