@@ -1,8 +1,11 @@
-use serde_json::{Deserializer, Value as JsonValue, json};
+use serde_json::{
+    Deserializer,
+    Value as JsonValue,
+    to_string
+};
 
-use tokio::codec::{Decoder, Encoder, Framed};
+use tokio::codec::{Decoder, Encoder};
 use bytes::{BytesMut, BufMut};
-use tokio::prelude::*;
 use std::{io};
 
 #[derive(Debug, PartialEq)]
@@ -44,20 +47,24 @@ impl Encoder for JsonCodec {
     type Error = io::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), io::Error> {
-        unimplemented!()
+        let json_string = to_string(&item)?;
+        dst.reserve(json_string.len() + 1);
+        dst.put(json_string);
+        dst.put("\n");
+        Ok(())
     }
 }
 
+fn create_codec_with_bytes() -> (BytesMut, JsonCodec) {
+    (BytesMut::with_capacity(64), JsonCodec::new())
+}
 
 #[cfg(test)]
 mod decoder
 {
     use super::*;
     use tokio::io::ErrorKind;
-
-    fn create_codec_with_bytes() -> (BytesMut, JsonCodec) {
-        (BytesMut::new(), JsonCodec::new())
-    }
+    use serde_json::json;
 
 
     #[test]
@@ -124,8 +131,40 @@ mod decoder
 #[cfg(test)]
 mod encoder
 {
-    #[test]
-    fn something () {
+    use super::*;
+    use serde_json::json;
 
+    #[test]
+    fn writes_single_json_object() {
+        let (mut buffer, mut codec) = create_codec_with_bytes();
+        codec.encode(json!({"something": "happened"}), &mut buffer);
+
+        assert_eq!(
+            "{\"something\":\"happened\"}\n", buffer
+        )
+    }
+
+    #[test]
+    fn encodes_multiple_items () {
+        let (mut buffer, mut codec) = create_codec_with_bytes();
+        codec.encode(json!({"something": "happened1"}), &mut buffer);
+        codec.encode(json!({"something": "happened2"}), &mut buffer);
+
+        assert_eq!(
+            "{\"something\":\"happened1\"}\n{\"something\":\"happened2\"}\n", buffer
+        )
+    }
+
+    #[test]
+    fn encodes_structures_larger_then_default_buffer_capacity () {
+        let (mut buffer, mut codec) = create_codec_with_bytes();
+        codec.encode(json!({"something": "happened1", "zdata": "that is too long"}), &mut buffer);
+        codec.encode(json!({"something": "happened2", "zdata": "that is too long"}), &mut buffer);
+
+        assert_eq!(
+            "{\"something\":\"happened1\",\"zdata\":\"that is too long\"}\n\
+            {\"something\":\"happened2\",\"zdata\":\"that is too long\"}\n",
+            buffer
+        )
     }
 }
