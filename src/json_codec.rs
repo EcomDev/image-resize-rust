@@ -1,12 +1,9 @@
-use serde_json::{
-    Deserializer,
-    Value as JsonValue,
-    to_string
-};
+use serde_json::{Deserializer, Value as JsonValue, to_string, StreamDeserializer, Value};
 
 use tokio::codec::{Decoder, Encoder};
 use bytes::{BytesMut, BufMut};
 use std::{io};
+use serde_json::de::SliceRead;
 
 #[derive(Debug, PartialEq)]
 pub struct JsonCodec {
@@ -19,24 +16,49 @@ impl JsonCodec {
     }
 }
 
+fn clear_until_new_line_or_eof(
+    json_stream: StreamDeserializer<SliceRead, JsonValue>,
+    bytes: &mut BytesMut
+) {
+    let new_line = bytes[..]
+        .iter()
+        .position(|b| *b == b'\n');
+
+    match new_line {
+        Some(pos) => bytes.advance(pos + 1),
+        None => bytes.clear()
+    }
+}
+
+fn advance_buffer(json_stream: StreamDeserializer<SliceRead, JsonValue>,
+                  bytes: &mut BytesMut) {
+    bytes.advance(json_stream.byte_offset());
+}
+
 impl Decoder for JsonCodec {
     type Item = JsonValue;
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
-        let mut json_stream = Deserializer::from_slice(&src[..])
+
+        let slice = src.to_vec();
+        let mut json_stream = Deserializer::from_slice(&slice)
             .into_iter::<JsonValue>();
 
         let result = match json_stream.next() {
             Some(Ok(value)) => Ok(Some(value)),
-            Some(Err(_)) => Err(io::Error::new(
+            Some(Err(ref error)) if error.is_eof() => Ok(None),
+            Some(Err(_))=> Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Error while parsing JSON structure"
             )),
-            _ => Ok(None)
+            None => Ok(None)
         };
 
-        src.advance(json_stream.byte_offset());
+        match result {
+            Err(_) => clear_until_new_line_or_eof(json_stream, &mut *src),
+            Ok(_) => advance_buffer(json_stream,  &mut *src),
+        };
 
         result
     }
@@ -55,6 +77,7 @@ impl Encoder for JsonCodec {
     }
 }
 
+#[cfg(test)]
 fn create_codec_with_bytes() -> (BytesMut, JsonCodec) {
     (BytesMut::with_capacity(64), JsonCodec::new())
 }
@@ -114,17 +137,31 @@ mod decoder
         assert_eq!("Error while parsing JSON structure", format!("{}", codec.decode(&mut buffer).err().unwrap()))
     }
 
+    #[test]
     fn continues_parsing_json_after_errored_input()
     {
         let (mut buffer, mut codec)  = create_codec_with_bytes();
 
-        buffer.put("{invalid} ");
+        buffer.put("{invalid}\n");
         buffer.put(r#"{"good":"data"}"#);
 
         codec.decode(&mut buffer);
 
 
         assert_eq!(json!({"good": "data"}), codec.decode(&mut buffer).unwrap().unwrap());
+    }
+
+    #[test]
+    fn drains_buffer_from_errored_input()
+    {
+        let (mut buffer, mut codec)  = create_codec_with_bytes();
+
+        buffer.put("{invalid}\n");
+        buffer.put(r#"{"good":"data"}"#);
+
+        codec.decode(&mut buffer);
+
+        assert_eq!(r#"{"good":"data"}"#, buffer);
     }
 }
 

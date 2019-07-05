@@ -1,5 +1,6 @@
 use futures::stream::Stream;
 use futures::future;
+use tokio::prelude::*;
 
 #[derive(Debug, PartialEq)]
 pub enum Connection<T: Sized> {
@@ -10,8 +11,8 @@ pub enum Connection<T: Sized> {
 #[derive(Debug, PartialEq)]
 pub struct ConnectionError(());
 
-pub fn merge_input_and_output_stream<S1, S2, T>(input: S1, output: S2)
-                                                -> impl Stream<Item=Connection<T>, Error=ConnectionError>
+pub fn combine_stream<S1, S2, T>(input: S1, output: S2)
+                                 -> impl Stream<Item=Connection<T>, Error=()>
     where S1: Stream<Item=T, Error=T> + Sized,
           S2: Stream<Item=T, Error=()> + Sized
 {
@@ -20,12 +21,12 @@ pub fn merge_input_and_output_stream<S1, S2, T>(input: S1, output: S2)
         .select(
             output
                 .map(|v| Connection::Output(v))
-                .map_err(ConnectionError)
+                .map_err(| _ | ())
         )
 }
 
 #[cfg(test)]
-mod stream_merger
+mod stream_combinator
 {
     use futures::prelude::*;
     use futures::stream;
@@ -37,7 +38,7 @@ mod stream_merger
     fn empty_stream() {
         let empty_stream = stream::empty::<JsonValue, JsonValue>();
 
-        let result = merge_input_and_output_stream(
+        let result = combine_stream(
             empty_stream,
             stream::empty(),
         );
@@ -47,7 +48,7 @@ mod stream_merger
 
     #[test]
     fn transforms_input_stream_values_into_connection_input() {
-        let result = merge_input_and_output_stream(
+        let result = combine_stream(
             stream::iter_ok(vec![
                 json!({"command": "command1"}),
                 json!({"command": "command2"})
@@ -73,7 +74,7 @@ mod stream_merger
             Err(json!({"error": "bad2!"})),
             Err(json!({"error": "bad3!"}))
         ];
-        let result = merge_input_and_output_stream(
+        let result = combine_stream(
             stream::iter_result(vec),
             stream::empty(),
         );
@@ -92,7 +93,7 @@ mod stream_merger
 
     #[test]
     fn transforms_output_stream_items_into_connection_output() {
-        let result = merge_input_and_output_stream(
+        let result = combine_stream(
             stream::empty(),
             stream::iter_ok(vec![
                 json!({"event": "event1"}),
@@ -115,7 +116,7 @@ mod stream_merger
 
     #[test]
     fn round_robins_events_from_both_streams() {
-        let result = merge_input_and_output_stream(
+        let result = combine_stream(
             stream::iter_result(vec![
                 Ok(json!({"input": "one"})),
                 Ok(json!({"input": "two"})),
@@ -145,3 +146,4 @@ mod stream_merger
         );
     }
 }
+
